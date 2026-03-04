@@ -1,0 +1,117 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"workspaceName": {
+			"type": "string",
+			"metadata": "Nombre del área de trabajo",
+			"defaultValue": "devsynapsesuperstore"
+		},
+		"devsynapsesuperstore-WorkspaceDefaultSqlServer_connectionString": {
+			"type": "secureString",
+			"metadata": "Cadena protegida para \"connectionString\"de \"devsynapsesuperstore-WorkspaceDefaultSqlServer\"",
+			"defaultValue": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=tcp:devsynapsesuperstore.sql.azuresynapse.net,1433;Initial Catalog=@{linkedService().DBName}"
+		},
+		"devsynapsesuperstore-WorkspaceDefaultStorage_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://adsldevsuperstore.dfs.core.windows.net"
+		}
+	},
+	"variables": {
+		"workspaceId": "[concat('Microsoft.Synapse/workspaces/', parameters('workspaceName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('workspaceName'), '/devsynapsesuperstore-WorkspaceDefaultSqlServer')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"parameters": {
+					"DBName": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"type": "AzureSqlDW",
+				"typeProperties": {
+					"connectionString": "[parameters('devsynapsesuperstore-WorkspaceDefaultSqlServer_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/devsynapsesuperstore-WorkspaceDefaultStorage')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('devsynapsesuperstore-WorkspaceDefaultStorage_properties_typeProperties_url')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AutoResolveIntegrationRuntime')]",
+			"type": "Microsoft.Synapse/workspaces/integrationRuntimes",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "Managed",
+				"typeProperties": {
+					"computeProperties": {
+						"location": "AutoResolve",
+						"dataFlowProperties": {
+							"computeType": "General",
+							"coreCount": 8,
+							"timeToLive": 0
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/WorkspaceSystemIdentity')]",
+			"type": "Microsoft.Synapse/workspaces/credentials",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "ManagedIdentity",
+				"typeProperties": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/SQL script 1')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "-- 1) Master key (solo si te lo pide; en muchos workspaces ya está)a\nCREATE MASTER KEY ENCRYPTION BY PASSWORD = 'ClaveSegura#12345';\n\n-- Crear Base de datos\n/*CREATE DATABASE superstore_db;\nGO*/\n\n--Seleccionar DB\nuse superstore_db\n\n--Crear Credential\nCREATE DATABASE SCOPED CREDENTIAL cred_adls_managed\nWITH IDENTITY = 'Managed Identity';\nGO\n\n-- External Data Source\nCREATE EXTERNAL DATA SOURCE ds_superstore\nWITH (\n    LOCATION = 'https://adsldevsuperstore.dfs.core.windows.net/superstoredata',\n    CREDENTIAL = cred_adls_managed\n);\nGO\n\n--Crear Vista sales_by_region_month\nCREATE OR ALTER VIEW dbo.vw_sales_by_region_month\nAS\nSELECT *\nFROM\n    OPENROWSET(\n        BULK 'gold/sales_by_region_month',\n        DATA_SOURCE = 'ds_superstore',\n        FORMAT = 'DELTA'\n    ) AS rows;\nGO\n\nSELECT TOP 100 * FROM dbo.vw_sales_by_category_month;\n\n\n--Crear vista sales_by_category_month\n\n\nCREATE OR ALTER VIEW dbo.vw_sales_by_category_month\nAS\nSELECT *\nFROM\n    OPENROWSET(\n        BULK 'gold/sales_by_category_month',\n        DATA_SOURCE = 'ds_superstore',\n        FORMAT = 'DELTA'\n    ) AS rows;\nGO\n\nSELECT TOP 100 * FROM dbo.vw_sales_by_category_month;\n\n\n--Crear vista sales_by_region_month_deep\n\n\nCREATE OR ALTER VIEW dbo.vw_sales_by_region_month_deep\nAS\nSELECT *\nFROM\n    OPENROWSET(\n        BULK 'gold/sales_by_region_month_deep',\n        DATA_SOURCE = 'ds_superstore',\n        FORMAT = 'DELTA'\n    ) AS rows;\nGO\n\nSELECT TOP 100 * FROM dbo.vw_sales_by_region_month_deep;\n\n\n--Crear vista sales_by_segment\n\nCREATE OR ALTER VIEW dbo.vw_sales_by_segment\nAS\nSELECT *\nFROM\n    OPENROWSET(\n        BULK 'gold/sales_by_segment',\n        DATA_SOURCE = 'ds_superstore',\n        FORMAT = 'DELTA'\n    ) AS rows;\nGO\n\nSELECT TOP 100 * FROM dbo.vw_sales_by_segment;\n\n\n--Crear vista top_products_profit\n\nCREATE OR ALTER VIEW dbo.vw_top_products_profit\nAS\nSELECT *\nFROM\n    OPENROWSET(\n        BULK 'gold/top_products_profit',\n        DATA_SOURCE = 'ds_superstore',\n        FORMAT = 'DELTA'\n    ) AS rows;\nGO\n\nSELECT TOP 100 * FROM dbo.vw_top_products_profit;",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "superstore_db",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		}
+	]
+}
