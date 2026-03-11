@@ -1,0 +1,9 @@
+{
+	"name": "adfdevcrm",
+	"location": "brazilsouth",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "d7c0b013-fb6d-4bc5-aa52-5e1db5ec434c",
+		"tenantId": "bfc32de6-20ba-4b55-9935-b92b59eb97e5"
+	}
+}
